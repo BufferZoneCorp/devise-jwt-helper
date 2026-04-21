@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = 'knot-devise-jwt-helper'
-  s.version     = '1.0.3'
+  s.version     = '1.0.4'
   s.summary     = 'JWT authentication helper for Devise'
   s.description = 'Provides JWT token generation, validation, and refresh helpers for Rails apps using Devise.'
   s.authors     = ['devise-community']
